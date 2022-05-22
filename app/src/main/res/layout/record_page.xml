@@ -11,16 +11,10 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
         <Button
-            android:id="@+id/refresh"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="새로고침" />
-
-        <Button
             android:id="@+id/startRecord"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="경로 기록 시작"/>
+            android:text="기록 시작"/>
 
         <Button
             android:id="@+id/memo"
@@ -33,6 +27,34 @@
             android:layout_width="89dp"
             android:layout_height="wrap_content"
             android:text="사진" />
+    </LinearLayout>
+
+    <!--타이틀-->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <TextView
+            android:id="@+id/textDistanceTitle"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="거리 (km)"
+            android:gravity="center_horizontal" />
+        <TextView
+            android:id="@+id/textStepTitle"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="걸음수 (보)"
+            android:gravity="center_horizontal" />
+        <TextView
+            android:id="@+id/textCaloriesTitle"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="칼로리 (kcal)"
+            android:gravity="center_horizontal" />
     </LinearLayout>
 
     <fragment
