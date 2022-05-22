@@ -46,6 +46,7 @@ import android.widget.TextView;
 public class recordActivity extends AppCompatActivity implements OnMapReadyCallback,
         ActivityCompat.OnRequestPermissionsResultCallback{
     GoogleMap mMap;
+    MarkerOptions markerOptions = new MarkerOptions();
 
     static final int PERMISSIONS_REQUEST = 0x00000001;
 
@@ -83,9 +84,7 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
         startRecordButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) { //그리고 걸음 중지 버튼 누를 때도 상태 바뀌어야 함
-                if (mCurrentLocation != null) { //추가
-                    changeWalkState();        //걸음 상태 변경
-                }
+                changeWalkState();        //걸음 상태 변경
             }
         });
 
@@ -109,10 +108,24 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
 
     private void changeWalkState() {
         if (!walkState) {
-            Toast.makeText(getApplicationContext(), "걸음 시작", Toast.LENGTH_SHORT).show();
-            walkState = true;
-            startLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());        //현재 위치를 시작점으로 설정
-            startRecordButton.setText("기록 중지");
+            try {
+                Toast.makeText(getApplicationContext(), "걸음 시작", Toast.LENGTH_SHORT).show();
+                walkState = true;
+
+                LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+                String locationProvider = LocationManager.NETWORK_PROVIDER;
+                Location loc = locationManager.getLastKnownLocation(locationProvider);
+
+                startLatLng = new LatLng(loc.getLatitude(), loc.getLongitude()); //현재 위치를 시작점으로 설정, 수정
+
+                mMap.moveCamera(CameraUpdateFactory.newLatLng(startLatLng));
+                mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
+
+                startRecordButton.setText("기록 중지");
+            } catch(SecurityException e){
+                e.printStackTrace();
+            }
+
         } else {
             Toast.makeText(getApplicationContext(), "걸음 종료", Toast.LENGTH_SHORT).show();
             walkState = false;
@@ -123,7 +136,7 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
     private void drawPath() {
         PolylineOptions options = new PolylineOptions().add(startLatLng).add(endLatLng).width(15).color(Color.RED).geodesic(true);
         polylines.add(mMap.addPolyline(options));
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(startLatLng, 18));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(startLatLng, 15));
     }
 
     @Override
@@ -152,23 +165,23 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
             if (locationList.size() > 0) {
                 location = locationList.get(locationList.size() - 1);
 
-                LatLng currentPosition = new LatLng(location.getLatitude(), location.getLongitude());
+                //LatLng currentPosition = new LatLng(location.getLatitude(), location.getLongitude());
 
-                    /*
-                    LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+                try {
+                    LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
                     String locationProvider = LocationManager.NETWORK_PROVIDER;
                     Location loc = locationManager.getLastKnownLocation(locationProvider);
-                    double latitude = loc.getLatitude();
-                    double longitude = loc.getLongitude();
                     currentPosition = new LatLng(loc.getLatitude(), loc.getLongitude());
-                    */
 
-                String markerTitle = getCurrentAddress(currentPosition);
-                String markerSnippet = "특징글";
-                Log.d(TAG, "onLocationResult : " + markerSnippet);
+                    String markerTitle = getCurrentAddress(currentPosition);
+                    String markerSnippet = "특징글";
+                    Log.d(TAG, "onLocationResult : " + markerSnippet);
 
-                setCurrentLocation(location, markerTitle, markerSnippet);
-                mCurrentLocation = location;
+                    setCurrentLocation(location, markerTitle, markerSnippet);
+                    mCurrentLocation = location;
+                } catch(SecurityException e){
+                    e.printStackTrace();
+                }
                 /*
                 endLatLng = new LatLng(latitude, longitude);
                 drawPath();
@@ -184,7 +197,6 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
 
         LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
 
-        MarkerOptions markerOptions = new MarkerOptions();
         markerOptions.position(currentLatLng);
         markerOptions.title(markerTitle);
         markerOptions.snippet(markerSnippet);
