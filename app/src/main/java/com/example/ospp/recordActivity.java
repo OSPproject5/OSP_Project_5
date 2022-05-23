@@ -2,9 +2,9 @@ package com.example.ospp;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Looper;
 import android.widget.Button;
 import android.Manifest;
 
@@ -17,19 +17,18 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 import android.graphics.Color;
-import androidx.annotation.Nullable;
 import androidx.annotation.NonNull;
 import android.util.Log;
 import androidx.core.app.ActivityCompat;
 import com.google.android.gms.maps.CameraUpdate;
-import com.google.android.gms.maps.CameraUpdateFactory;
 import android.content.Context;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 import android.location.Location;
 import android.location.LocationManager;
-import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.maps.model.Marker;
 import android.view.View;
@@ -50,10 +49,10 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
 
     static final int PERMISSIONS_REQUEST = 0x00000001;
 
-    private LocationRequest mLocationRequest;
+    private FusedLocationProviderClient fusedLocationClient;
+    private LocationRequest locationRequest;
     private Location mCurrentLocation;
     private Location location;
-    private FusedLocationProviderClient mFusedLocationProviderApi;
     private boolean mPermissionDenied;
     private LocationManager locationManager;
     private LatLng startLatLng = new LatLng(0, 0); //시작점
@@ -83,13 +82,21 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
 
         startRecordButton.setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(View view) { //그리고 걸음 중지 버튼 누를 때도 상태 바뀌어야 함
+            public void onClick(View view) { //걸음 중지 버튼 누를 때도 상태 바뀜
                 changeWalkState();        //걸음 상태 변경
             }
         });
 
-        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map); //this 추가? null err
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        try {
+            this.locationRequest = LocationRequest.create().setInterval(1000).setFastestInterval(500).setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        } catch(SecurityException e){
+            e.printStackTrace();
+        }
+
+        this.fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
     }
 
     public void OnCheckPermission(){
@@ -113,10 +120,21 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
                 walkState = true;
 
                 LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                String locationProvider = LocationManager.NETWORK_PROVIDER;
-                Location loc = locationManager.getLastKnownLocation(locationProvider);
+                Location loc;
+                try {
+                    loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                    loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
 
-                startLatLng = new LatLng(loc.getLatitude(), loc.getLongitude()); //현재 위치를 시작점으로 설정, 수정
+                    currentPosition = new LatLng(loc.getLatitude(), loc.getLongitude());
+                    startLatLng = currentPosition; //추가, 이제 바다 한가운데 아님
+                    String markerTitle = getCurrentAddress(currentPosition);
+                    String markerSnippet = "현위치";
+                    Log.d(TAG, "onLocationResult : " + markerSnippet);
+                    setCurrentLocation(loc, markerTitle, markerSnippet);
+                    mCurrentLocation = loc;
+                } catch(SecurityException e){
+                    e.printStackTrace();
+                }
 
                 mMap.moveCamera(CameraUpdateFactory.newLatLng(startLatLng));
                 mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
@@ -136,7 +154,6 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
     private void drawPath() {
         PolylineOptions options = new PolylineOptions().add(startLatLng).add(endLatLng).width(15).color(Color.RED).geodesic(true);
         polylines.add(mMap.addPolyline(options));
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(startLatLng, 15));
     }
 
     @Override
@@ -153,6 +170,12 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
     public void onMapReady(final GoogleMap googleMap) {
         mMap = googleMap;
         googleMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
+
+        try {
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+        } catch(SecurityException e){
+            e.printStackTrace();
+        }
     }
 
     LocationCallback locationCallback = new LocationCallback() {
@@ -167,36 +190,30 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
 
                 //LatLng currentPosition = new LatLng(location.getLatitude(), location.getLongitude());
 
+                Location loc;
+                LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
                 try {
-                    LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                    String locationProvider = LocationManager.NETWORK_PROVIDER;
-                    Location loc = locationManager.getLastKnownLocation(locationProvider);
+                    loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                    loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+
                     currentPosition = new LatLng(loc.getLatitude(), loc.getLongitude());
-
                     String markerTitle = getCurrentAddress(currentPosition);
-                    String markerSnippet = "특징글";
+                    String markerSnippet = "현위치";
                     Log.d(TAG, "onLocationResult : " + markerSnippet);
-
-                    setCurrentLocation(location, markerTitle, markerSnippet);
-                    mCurrentLocation = location;
+                    setCurrentLocation(loc, markerTitle, markerSnippet);
+                    mCurrentLocation = loc;
                 } catch(SecurityException e){
                     e.printStackTrace();
                 }
-                /*
-                endLatLng = new LatLng(latitude, longitude);
-                drawPath();
-                startLatLng = new LatLng(latitude, longitude);
-                */
             }
         }
     };
 
-    public void setCurrentLocation(Location location, String markerTitle, String markerSnippet) {
-        double latitude = location.getLatitude(), longitude = location.getLongitude();
+    public void setCurrentLocation(Location loc, String markerTitle, String markerSnippet) {
+        double latitude = loc.getLatitude(), longitude = loc.getLongitude();
         if (currentMarker != null) currentMarker.remove();
 
-        LatLng currentLatLng = new LatLng(location.getLatitude(), location.getLongitude());
-
+        LatLng currentLatLng = new LatLng(latitude, longitude);
         markerOptions.position(currentLatLng);
         markerOptions.title(markerTitle);
         markerOptions.snippet(markerSnippet);
