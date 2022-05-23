@@ -1,13 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
     <!--산행 기록 레이아웃-->
-    <TextView
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text = "산행 기록"
-        android:layout_gravity="center"
-        />
+        android:orientation="horizontal">
+        <Button
+            android:id="@+id/startRecord"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="기록 시작"/>
+
+        <Button
+            android:id="@+id/memo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="메모"/>
+
+        <Button
+            android:id="@+id/camera"
+            android:layout_width="89dp"
+            android:layout_height="wrap_content"
+            android:text="사진" />
+    </LinearLayout>
+
+    <!--타이틀-->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <TextView
+            android:id="@+id/textDistanceTitle"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="거리 (km)"
+            android:gravity="center_horizontal" />
+        <TextView
+            android:id="@+id/textStepTitle"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="걸음수 (보)"
+            android:gravity="center_horizontal" />
+        <TextView
+            android:id="@+id/textCaloriesTitle"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="칼로리 (kcal)"
+            android:gravity="center_horizontal" />
+    </LinearLayout>
+
+    <fragment
+        android:id="@+id/map"
+        android:name="com.google.android.gms.maps.SupportMapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        tools:context=".MapsActivity" />
+
 </LinearLayout>
