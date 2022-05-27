@@ -27,6 +27,12 @@
             android:layout_width="89dp"
             android:layout_height="wrap_content"
             android:text="사진" />
+
+        <Button
+            android:id="@+id/saveEnd"
+            android:layout_width="121dp"
+            android:layout_height="wrap_content"
+            android:text="저장 및 종료" />
     </LinearLayout>
 
     <!--타이틀-->
