@@ -13,11 +13,13 @@
     <uses-feature android:name="android.hardware.camera"
         android:required="true" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="OSPP"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.OSPP">
@@ -33,7 +35,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="보안을 위하여 삭제함" />
+            android:value="보안 위하여 삭제" />
 
         <uses-library
             android:name="org.apache.http.legacy"
@@ -42,5 +44,15 @@
         <activity android:name=".recordActivity"/>
         <activity android:name=".giveActivity"/>
         <activity android:name=".zoneActivity"/>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.example.ospp"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"
+            />
+        </provider>
     </application>
 </manifest>

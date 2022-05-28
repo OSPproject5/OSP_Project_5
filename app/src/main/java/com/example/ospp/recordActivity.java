@@ -2,17 +2,20 @@ package com.example.ospp;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
+import android.graphics.Matrix;
 import android.graphics.drawable.BitmapDrawable;
+import android.media.ExifInterface;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Looper;
 import android.provider.MediaStore;
 import android.widget.Button;
 import android.Manifest;
-
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -26,12 +29,10 @@ import android.graphics.Color;
 import androidx.annotation.NonNull;
 import android.util.Log;
 import androidx.core.app.ActivityCompat;
-
 import com.google.android.gms.maps.CameraUpdate;
 import android.content.Context;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
-
 import android.content.Intent;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
@@ -43,21 +44,30 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
 import android.location.Geocoder;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.util.Locale;
 import java.io.IOException;
 import android.location.Address;
-
+import androidx.core.content.FileProvider;
+import android.net.Uri;
+import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
 import android.widget.TextView;
+import java.text.SimpleDateFormat;
+import android.os.Build;
+import static android.os.Environment.DIRECTORY_PICTURES;
 
 public class recordActivity extends AppCompatActivity implements OnMapReadyCallback,
         ActivityCompat.OnRequestPermissionsResultCallback{
     GoogleMap mMap;
 
     static final int PERMISSIONS_REQUEST = 0x00000001;
-    private final int MY_PERMISSIONS_REQUEST_CAMERA = 1001; // 카메라 사용 가능?
-    private final int CAMERA_REQUEST_CODE = 1;
+    private static final int REQUEST_IMAGE_CAPTURE = 672;
+    private String imageFilePath;
+    private Uri photoUri;
 
     private FusedLocationProviderClient fusedLocationClient;
     private LocationRequest locationRequest;
@@ -72,8 +82,8 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
     private Marker currentMarker; // 현위치 마커
     private Marker memoMarker; // 메모 마커
     private Marker cameraMarker; // 카메라 마커
+    private MediaScanner mMediaScanner;
     private static final String TAG = "googlemap_example";
-    private String titleValue;
 
     private Button startRecordButton;
     private Button memoButton;
@@ -118,84 +128,66 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
                 alert.setPositiveButton("저장", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int i) {
-                        titleValue = input.getText().toString(); // 텍스트를 value에 저장 [오류] 맨 처음 버퍼 비워야함
+                        String titleValue = input.getText().toString();
+
+                        // 메모 마커 지도에 띄우기
+                        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+                        Location loc;
+
+                        try {
+                            loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                            loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+
+                            herePosition = new LatLng(loc.getLatitude(), loc.getLongitude());
+                            String markerTitle = getCurrentAddress(herePosition);
+
+                            MarkerOptions markerOptions = new MarkerOptions();
+                            markerOptions.position(herePosition);
+                            markerOptions.title(markerTitle);
+                            markerOptions.snippet(titleValue);
+
+                            // 마커 이미지 메모용으로 따로 바꾸기
+                            BitmapDrawable bitmapdraw = (BitmapDrawable)getResources().getDrawable(R.drawable.marker, null);
+                            Bitmap b = bitmapdraw.getBitmap();
+                            Bitmap smallMarker = Bitmap.createScaledBitmap(b, 100, 100, false);
+                            markerOptions.icon(BitmapDescriptorFactory.fromBitmap(smallMarker));
+
+                            memoMarker = mMap.addMarker(markerOptions);
+
+                            // 해당 마커 리스트에 저장
+                            memoMarkerOptions.add(markerOptions);
+
+                        } catch(SecurityException e){
+                            e.printStackTrace();
+                        }
                     }
                 });
-
                 alert.show();
-
-                // 메모 마커 지도에 띄우기
-                LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                Location loc;
-
-                try {
-                    loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                    loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-
-                    herePosition = new LatLng(loc.getLatitude(), loc.getLongitude());
-                    String markerTitle = getCurrentAddress(herePosition);
-
-                    MarkerOptions markerOptions = new MarkerOptions();
-                    markerOptions.position(herePosition);
-                    markerOptions.title(markerTitle);
-                    markerOptions.snippet(titleValue);
-
-                    // 마커 이미지 메모용으로 따로 바꾸기
-                    BitmapDrawable bitmapdraw = (BitmapDrawable)getResources().getDrawable(R.drawable.marker, null);
-                    Bitmap b = bitmapdraw.getBitmap();
-                    Bitmap smallMarker = Bitmap.createScaledBitmap(b, 100, 100, false);
-                    markerOptions.icon(BitmapDescriptorFactory.fromBitmap(smallMarker));
-
-                    memoMarker = mMap.addMarker(markerOptions);
-
-                    // 해당 마커 리스트에 저장
-                    memoMarkerOptions.add(markerOptions);
-
-                } catch(SecurityException e){
-                    e.printStackTrace();
-                }
             }
         });
 
         cameraButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) { // 카메라 버튼 눌렀을 때
-
                 // 카메라 촬영 시 커스텀 마커 이미지로 저장
-                // -----
                 Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                startActivityForResult(intent, CAMERA_REQUEST_CODE);
 
-                // 마커 띄우기
-                LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                Location loc;
+                if(intent.resolveActivity(getPackageManager())!=null) {
+                    File photoFile = null;
+                    try {
+                        photoFile = createImageFile();
+                    } catch (IOException e) {
+                    }
 
-                // 해당 마커 리스트에 저장
-                try {
-                    loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                    loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-
-                    herePosition = new LatLng(loc.getLatitude(), loc.getLongitude());
-                    String markerTitle = getCurrentAddress(herePosition);
-
-                    MarkerOptions markerOptions = new MarkerOptions();
-                    markerOptions.position(herePosition);
-                    markerOptions.title(markerTitle);
-
-                    // 마커 이미지 찍은 사진으로 바꾸기
-                    // -----
-
-                    cameraMarker = mMap.addMarker(markerOptions);
-
-                    // 해당 마커 리스트에 저장
-                    cameraMarkerOptions.add(markerOptions);
-
-                } catch(SecurityException e){
-                    e.printStackTrace();
+                    if (photoFile != null) {
+                        photoUri = FileProvider.getUriForFile(getApplicationContext(), getPackageName(), photoFile);
+                        intent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+                        startActivityForResult(intent, REQUEST_IMAGE_CAPTURE);
+                    }
                 }
             }
         });
-        
+
         saveButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) { // 저장 후 종료 버튼 클릭했을 때
@@ -218,19 +210,136 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
         this.fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
     }
 
-    public void OnCheckPermission(){
-        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-        || ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED){
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)){
-                Toast.makeText(this, "앱 실행을 위해서는 권한 설정이 필요합니다.", Toast.LENGTH_LONG).show();
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.CAMERA}, PERMISSIONS_REQUEST);
-            } else{
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.CAMERA}, PERMISSIONS_REQUEST);
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data){
+        super.onActivityResult(requestCode, resultCode, data); //이거 지워?
+
+        if (requestCode==REQUEST_IMAGE_CAPTURE && requestCode == RESULT_OK){ //이거 0에서 바꿈 전자
+            Bitmap bitmap = BitmapFactory.decodeFile(imageFilePath);
+            ExifInterface exif = null;
+
+            try{
+                exif = new ExifInterface(imageFilePath);
+            } catch(IOException e){
+                e.printStackTrace();
             }
+
+            int exifOrientation;
+            int exifDegree;
+
+            if (exif != null){
+                exifOrientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                exifDegree = exifOrientationToDegrees(exifOrientation);
+            } else{
+                exifDegree = 0;
+            }
+
+            String result = "";
+            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HHmmss", Locale.getDefault());
+            Date curDate = new Date(System.currentTimeMillis());
+            String filename = formatter.format(curDate);
+
+            String strFolderName = Environment.getExternalStoragePublicDirectory(DIRECTORY_PICTURES) + File.separator + "OSPP" + File.separator;
+            File file = new File(strFolderName);
+            if (!file.exists()) {
+                file.mkdirs();
+            }
+
+            File f = new File(strFolderName + "/" + filename + ".png");
+            result = f.getPath();
+
+            FileOutputStream fOut = null;
+            try{
+                fOut = new FileOutputStream(f);
+            } catch (FileNotFoundException e){
+                e.printStackTrace();
+                result = "Save Error fOut";
+            }
+
+            rotate(bitmap, exifDegree).compress(Bitmap.CompressFormat.PNG, 70, fOut);
+
+            try{
+                fOut.flush();
+            } catch(IOException e){
+                e.printStackTrace();
+            }
+
+            try{
+                fOut.close();
+                mMediaScanner.mediaScanning(strFolderName + "/" + filename + ".png");
+            } catch(IOException e){
+                e.printStackTrace();
+                result = "File close Error";
+            }
+
+            // 마커 띄우기
+            LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            Location loc;
+
+            // 해당 마커 리스트에 저장
+            try {
+                loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+
+                herePosition = new LatLng(loc.getLatitude(), loc.getLongitude());
+                String markerTitle = getCurrentAddress(herePosition);
+
+                MarkerOptions markerOptions = new MarkerOptions();
+                markerOptions.position(herePosition);
+                markerOptions.title(markerTitle);
+
+                // 마커 이미지 찍은 사진으로 바꾸기
+                Bitmap b = null;
+                try{
+                    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P){
+                        b = ImageDecoder.decodeBitmap(ImageDecoder.createSource(getContentResolver(), photoUri));
+                    }
+                    else{
+                        b = MediaStore.Images.Media.getBitmap(getContentResolver(), photoUri);
+                    }
+                } catch(IOException e){
+                    e.printStackTrace();
+                }
+
+                b = Bitmap.createScaledBitmap(b, 200, 200, false);
+                //b = rotate(b,exifDegree);
+                markerOptions.icon(BitmapDescriptorFactory.fromBitmap(b));
+
+                cameraMarker = mMap.addMarker(markerOptions);
+
+                // 해당 마커 리스트에 저장
+                cameraMarkerOptions.add(markerOptions);
+
+            } catch(SecurityException e){
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private File createImageFile() throws IOException{
+        String timeStamp = new SimpleDateFormat("yyyyMM_HHmmss").format(new Date());
+        String imageFileName = "JPEG_" + timeStamp + "_";
+        File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File image = File.createTempFile(
+                imageFileName,
+                ".jpg",
+                storageDir
+        );
+        imageFilePath = image.getAbsolutePath();
+        return image;
+    }
+
+    public void OnCheckPermission() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
+                Toast.makeText(this, "앱 실행을 위해서는 권한 설정이 필요합니다.", Toast.LENGTH_LONG).show();
+            }
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA}, PERMISSIONS_REQUEST);
         }
     }
 
@@ -347,6 +456,23 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
             drawPath();
             startLatLng = new LatLng(latitude, longitude);
         }
+    }
+
+    private int exifOrientationToDegrees(int exifOrientation){
+        if (exifOrientation == ExifInterface.ORIENTATION_ROTATE_90){
+            return 90;
+        } else if (exifOrientation == ExifInterface.ORIENTATION_ROTATE_180){
+            return 180;
+        } else if (exifOrientation == ExifInterface.ORIENTATION_ROTATE_270) {
+            return 270;
+        }
+        return 0;
+    }
+
+    private Bitmap rotate(Bitmap bitmap, float degree){
+        Matrix matrix = new Matrix();
+        matrix.postRotate(degree);
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
     }
 
     public String getCurrentAddress(LatLng latlng) { //지오코더, GPS를 주소로 변환
