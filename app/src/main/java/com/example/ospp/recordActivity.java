@@ -59,15 +59,29 @@ import android.widget.TextView;
 import java.text.SimpleDateFormat;
 import android.os.Build;
 import static android.os.Environment.DIRECTORY_PICTURES;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import androidx.core.content.ContextCompat;
 
 public class recordActivity extends AppCompatActivity implements OnMapReadyCallback,
-        ActivityCompat.OnRequestPermissionsResultCallback{
+        ActivityCompat.OnRequestPermissionsResultCallback, SensorEventListener{
     GoogleMap mMap;
 
     static final int PERMISSIONS_REQUEST = 0x00000001;
     private static final int REQUEST_IMAGE_CAPTURE = 672;
     private String imageFilePath;
     private Uri photoUri;
+
+    SensorManager sensorManager;
+    Sensor stepCountSensor;
+    TextView stepCountView;
+    TextView textCalories;
+    int currentSteps = 0; //발걸음 수
+    float[] results = new float[1]; //발걸음
+    double distance = 0; //칼로리 계산할 발걸음
+    double calories = 0; //칼로리 계산
 
     private FusedLocationProviderClient fusedLocationClient;
     private LocationRequest locationRequest;
@@ -93,7 +107,6 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
     private List<Polyline> polylines = new ArrayList<>();
     private List<MarkerOptions> memoMarkerOptions = new ArrayList<>(); //메모 마커 옵션들
     private List<MarkerOptions> cameraMarkerOptions = new ArrayList<>(); //카메라 마커 옵션들
-    private TextView textCalories; // 소모 칼로리 텍스트 뷰
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -104,6 +117,12 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
         memoButton = (Button) findViewById(R.id.memo); // 메모
         cameraButton = (Button) findViewById(R.id.camera); // 카메라
         saveButton = (Button) findViewById(R.id.saveEnd); // 저장 후 종료
+
+        stepCountView = findViewById(R.id.movement); //발걸음
+        textCalories = findViewById(R.id.calories); //칼로리
+
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        stepCountSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
 
         OnCheckPermission();
 
@@ -333,13 +352,14 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED
-                || ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)
                     || ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
                 Toast.makeText(this, "앱 실행을 위해서는 권한 설정이 필요합니다.", Toast.LENGTH_LONG).show();
             }
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA}, PERMISSIONS_REQUEST);
+                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CAMERA, Manifest.permission.ACTIVITY_RECOGNITION}, PERMISSIONS_REQUEST);
         }
     }
 
@@ -366,6 +386,21 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
                     e.printStackTrace();
                 }
 
+                try{
+                    if(stepCountSensor !=null) {
+                        // 센서 속도 설정
+                        // * 옵션
+                        // - SENSOR_DELAY_NORMAL: 20,000 초 딜레이
+                        // - SENSOR_DELAY_UI: 6,000 초 딜레이
+                        // - SENSOR_DELAY_GAME: 20,000 초 딜레이
+                        // - SENSOR_DELAY_FASTEST: 딜레이 없음
+                        //
+                        sensorManager.registerListener(this,stepCountSensor,SensorManager.SENSOR_DELAY_FASTEST);
+                    }
+                }catch (SecurityException e){
+                    e.printStackTrace();
+                }
+
                 mMap.moveCamera(CameraUpdateFactory.newLatLng(startLatLng));
                 mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
 
@@ -384,11 +419,25 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
     private void drawPath() {
         PolylineOptions options = new PolylineOptions().add(startLatLng).add(endLatLng).width(15).color(Color.RED).geodesic(true);
         polylines.add(mMap.addPolyline(options));
+        Location.distanceBetween(startLatLng.latitude, startLatLng.longitude, endLatLng.latitude, endLatLng.longitude, results); //거리 계산. 결과값은 results[0]에 있음.
+        distance = distance + results[0];
+        calories = (int)(distance * 0.001 * 41); //소모 칼로리 표시(1km당 41kcal)
+        textCalories.setText(String.valueOf(calories));
     }
 
     @Override
     protected void onStart() {
         super.onStart();
+        if(stepCountSensor !=null) {
+            // 센서 속도 설정
+            // * 옵션
+            // - SENSOR_DELAY_NORMAL: 20,000 초 딜레이
+            // - SENSOR_DELAY_UI: 6,000 초 딜레이
+            // - SENSOR_DELAY_GAME: 20,000 초 딜레이
+            // - SENSOR_DELAY_FASTEST: 딜레이 없음
+            //
+            sensorManager.registerListener(this,stepCountSensor,SensorManager.SENSOR_DELAY_FASTEST);
+        }
     }
 
     @Override
@@ -502,5 +551,25 @@ public class recordActivity extends AppCompatActivity implements OnMapReadyCallb
             Address address = addresses.get(0);
             return address.getAddressLine(0).toString();
         }
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        // 걸음 센서 이벤트 발생시
+        if(walkState==true){
+            if(event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR){
+
+                if(event.values[0]==1.0f){
+                    // 센서 이벤트가 발생할때 마다 걸음수 증가
+                    currentSteps++;
+                    stepCountView.setText(String.valueOf(currentSteps));
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int i) {
+
     }
 }
