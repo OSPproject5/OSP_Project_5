@@ -35,7 +35,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="보안 위하여 삭제" />
+            android:value="보안상 삭제함" />
 
         <uses-library
             android:name="org.apache.http.legacy"
