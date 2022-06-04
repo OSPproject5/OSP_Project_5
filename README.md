@@ -14,7 +14,7 @@
 ~~- [ ] 기록함~~
 - 보폭 기반 등산로 추천
   - [x] K-NN 모델
-  - [ ] 산 추천
+  - [x] [산 추천](https://github.com/OSPproject5/K-NN-Classification)
 
 #### 📌 Team 5
 |조장|조원|조원|조원|
